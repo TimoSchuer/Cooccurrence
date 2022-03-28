@@ -1,0 +1,140 @@
+---
+title: "Experiments"
+author: "Timo Schürmann"
+date: "8 2 2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(stringr)
+library(devtools)
+devtools::install_github("TimoSchuer/ExmaraldaR", upgrade = "never")
+library(ExmaraldaR)
+library(magrittr)
+library(tidyr)
+library(tm)
+library(MASS)
+library(cluster)
+library(Matrix)
+library(umap)
+library(plotly)
+```
+
+import test data
+
+```{r}
+path <- rstudioapi::selectDirectory()
+Corpus <- ExmaraldaR::read_exb_dir(pathDir = path, addMetaData = FALSE, annotation = "linear")
+```
+
+Filter for annotated events
+
+```{r}
+CorpAnn <- Corpus %>% filter(!is.na(V))
+```
+
+```{r}
+countPerIP <- CorpAnn %>% group_by(IPId,V, Variante) %>% count() %>% mutate(Variante= str_c(V,"_",Variante )) %>% ungroup() %>% dplyr::select(-V) %>%  pivot_wider(names_from = Variante, values_from = n) %>% mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IPId) %>% as.matrix() %>%  Matrix()
+# %>% mutate_all(funs(replace_na(.,0)))# %>% rename(docs= IPId) %>% as.dfm()
+```
+Variablen zusammenlegen
+```{r}
+countPerIP <- countPerIP %>% mutate(new= old1 +old2) %>% select(-c(old1, old2))
+```
+
+
+Kookkurrenzen
+```{r}
+CooCMat <- t(countPerIP) %*% countPerIP %>% Matrix()
+```
+Distanzmatrix
+```{r}
+ adjmatrix <- 1- cluster::daisy(CooCMat, metric = c("euclidean"))
+```
+MDS
+```{r}
+fit <- cmdscale(CooCMat, k=2) %>% as.data.frame()
+colnames(fit) <- c("Dim1", "Dim2")
+ggplot(fit,aes(x=Dim1, y=Dim2, label= rownames(fit))) + geom_jitter()+ geom_label()
+```
+
+Testing umap for dimension reduction
+```{r}
+umap.cooc <- CooCMat %>% as.matrix() %>% umap()
+data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>% separate(Var, into = c("Variable", "Variante"), sep="_")
+ggplot(data, aes(x=V1, y= V2, label= rownames(data)), shape= factor(Variable))+ geom_point(aes(colour= Variable)) +geom_text()
+```
+Variablenanalyse
+1. Schritt plotte alle Variablen einzeln
+2. Schritt zeige Häufigkeiten
+
+```{r}
+countVars <- function(Corpus, Variable= "Variable", Variante= "Variante"){
+  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n)
+  return(Counts)
+}
+
+plotCooCVars <- function(Corpus, Variable= "Variable", Variante= "Variante",facet= TRUE, umap.config= umap.defaults){
+    countPerIP <- Corpus %>% filter(!is.na(.data[[Variable]])) %>% 
+      group_by(IPId,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>% 
+      mutate(Variante= str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% ungroup() %>%
+      dplyr::select(-.data[[Variable]]) %>%  pivot_wider(names_from = Variante, values_from = n) %>%
+      mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IPId) %>% as.matrix() %>%  Matrix()
+     CooCMat <- t(countPerIP) %*% countPerIP %>% Matrix()
+   umap.cooc <- CooCMat %>% as.matrix() %>% umap(config = umap.config)
+   data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>% separate(Var, into = c("Variable", "Variante"), sep="_")
+   if(facet==TRUE){     
+     g <- data %>% ggplot(aes(x= V1, y= V2, label=rownames(.))) + geom_point()+ geom_text() +
+       facet_wrap(vars(Variable))
+     plot(g)
+   }else{
+     vars <- Corpus %>% filter(!is.na(.data[[Variable]]))%>% pull(.data[[Variable]]) %>% unique()
+     for (k in vars) {
+       g <- data %>% filter(Variable==k) %>% ggplot(aes(x= V1, y= V2, label=rownames(.))) + geom_point()+
+         geom_text()
+       plot(g)
+     }
+       
+     }
+    
+    
+}
+Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% plotCooCVars(Variable = "V", facet = FALSE)  
+countVars(Corpus, Variable = "V")
+```
+
+```{r}
+# one can add labels via + geom_text() or geom_label()
+plotCooC <- function(Corpus, Variable= "Variable", Variante="Variante", threshold= 10, umap.config=umap.defaults){
+  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n)
+  countPerIP <-Corpus %>% left_join(Counts, by=c(Variable, Variante))  %>% filter(!is.na(.data[[Variable]])) %>%
+    filter(n>= threshold) %>%   group_by(IPId,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>%
+    mutate(Variante= str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% ungroup() %>%
+    dplyr::select(-.data[[Variable]]) %>%  pivot_wider(names_from = Variante, values_from = n) %>%
+    mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IPId) %>% as.matrix() %>%  Matrix()
+       CooCMat <- t(countPerIP) %*% countPerIP %>% Matrix()
+   umap.cooc <- CooCMat %>% as.matrix() %>% umap(config= umap.config)
+   data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>% 
+     separate(Var, into = c("Variable", "Variante"), sep="_")
+   g <- ggplot(data, aes(x=V1, y= V2, label= rownames(data)), shape= factor(Variable))+ 
+     geom_point(aes(colour= Variable))
+   return(g)
+}
+
+```
+
+```{r}
+umap.config=umap.defaults
+umap.config$n_neighbors <- 15
+umap.config$min_dist <- 0.01
+g <-Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% plotCooC(Variable = "V", threshold= 20, umap.config = umap.config)
+```
+
+```{r}
+ggplotly(g)
+```
+

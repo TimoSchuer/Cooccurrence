@@ -1,0 +1,137 @@
+---
+title: "CooC with UMAP"
+author: "Timo Schürmann"
+date: "16 2 2022"
+output: 
+  html_document: 
+    theme: journal
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(stringr)
+library(devtools)
+devtools::install_github("TimoSchuer/ExmaraldaR", upgrade = "never")
+library(ExmaraldaR)
+library(magrittr)
+library(tidyr)
+library(tm)
+library(MASS)
+library(cluster)
+library(Matrix)
+library(umap)
+library(plotly)
+```
+
+## Funktionen definieren
+
+```{r}
+countVars <- function(Corpus, Variable= "Variable", Variante= "Variante"){
+  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n)
+  return(Counts)
+}
+
+plotCooCVars <- function(Corpus, Variable= "Variable", Variante= "Variante",facet= TRUE){
+    countPerIP <- Corpus %>% filter(!is.na(.data[[Variable]])) %>% 
+      group_by(IPId,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>% 
+      mutate(Variante= str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% ungroup() %>%
+      dplyr::select(-.data[[Variable]]) %>%  pivot_wider(names_from = Variante, values_from = n) %>%
+      mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IPId) %>% as.matrix() %>%  Matrix()
+     CooCMat <- t(countPerIP) %*% countPerIP %>% Matrix()
+   umap.cooc <- CooCMat %>% as.matrix() %>% umap()
+   data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>% separate(Var, into = c("Variable", "Variante"), sep="_")
+   if(facet==TRUE){     
+     g <- data %>% ggplot(aes(x= V1, y= V2, label=rownames(.))) + geom_point()+ geom_text() +
+       facet_wrap(vars(Variable))
+     plot(g)
+   }else{
+     vars <- Corpus %>% filter(!is.na(.data[[Variable]]))%>% pull(.data[[Variable]]) %>% unique()
+     for (k in vars) {
+       g <- data %>% filter(Variable==k) %>% ggplot(aes(x= V1, y= V2, label=rownames(.))) + geom_point()+
+         geom_text()
+       plot(g)
+     }
+       
+     }
+    
+    
+}
+plotCooC <- function(Corpus, Variable= "Variable", Variante="Variante", threshold= 10){
+  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n)
+  countPerIP <-Corpus %>% left_join(Counts, by=c(Variable, Variante))  %>% filter(!is.na(.data[[Variable]])) %>%
+    filter(n< threshold) %>%   group_by(IPId,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>%
+    mutate(Variante= str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% ungroup() %>%
+    dplyr::select(-.data[[Variable]]) %>%  pivot_wider(names_from = Variante, values_from = n) %>%
+    mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IPId) %>% as.matrix() %>%  Matrix()
+       CooCMat <- t(countPerIP) %*% countPerIP %>% Matrix()
+   umap.cooc <- CooCMat %>% as.matrix() %>% umap()
+   data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>% 
+     separate(Var, into = c("Variable", "Variante"), sep="_")
+   g <- ggplot(data, aes(x=V1, y= V2, label= rownames(data)), shape= factor(Variable))+ 
+     geom_point(aes(colour= Variable)) +geom_text()
+   return(g)
+}
+```
+
+## Daten einlesen
+
+```{r}
+# <- rstudioapi::selectDirectory()
+path <- "C:/Users/Admin/sciebo/Kookkurrenz-Projekt/Korpus/NeuFormartiert"
+Corpus <- ExmaraldaR::read_exb_dir(pathDir = path, addMetaData = FALSE, annotation = "linear")
+#Corpus
+```
+
+Ich habe mal recherchiert und der aktuelle Stand der Dimensionenreduzierung ist der UMAP Algorithmus. Im Wesentlichen erstellt der einen Graph im hochdimensionalen Raum und versucht dann im 2dimensionalen Raum nachzubilden, welche Punkte einander nah (und damit ähnlich) sind und welche weit entfernt. Dabei scheint mir ggü der Multidemsionalen Skalierung ein großer Vorteil, dass viele Dimensionen - also in unserem Fall viele Variablen/Varianten - kein Problem darstellen. UMAP ist auch der aktuelle Stand um die komplexen Kookkurrenzprofile der großen Sprachmodelle abzubilden.
+
+Für die Analyse verändert es die Ausgangssituation m.E. dahingehend, dass für die Variablenanalyse 2 Kriterien angenommen werden können, welche Varianten rausfallen oder welche zusammengelegt werden.
+
+1.  1\. absolute Häufigkeit
+
+    Kookkurrenzprofile von Varianten, die nur auf wenigen Intonationsphrasen basieren sind nicht aussagekräftig. Da muss man dann entscheiden: fallen diese Varianten raus oder gibt es Argumente, diese mit einer anderen Variante zusammenzulegen/ als hinreichend gleich im Sinne Langackers zu betrachten
+
+2.  Kookkurrenzprofile
+
+    Ausprägungen einer Variable, deren Kookkurrenzprofil sehr ähnlich sind können auch zusammengelegt werden.
+
+Zu 1 hier eine kleine Funktion, dass einem die absoluten Häufigkeiten in aufsteigender Reihenfolge ausgibt. Exemplarisch für die Datei NN-UED04-G-FGAT_neu_1. Man übergibt der Funktion einmal das eingelesene Korpus und sagt R wie die Spalten, in denen Variable und Variante stehen, heißen. Ärgerlich ist das R IPA Zeichen zwar korrekt einliest, aber nicht darstellen kann. Daran arbeite ich noch.
+
+```{r}
+Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% countVars(Variable= "V")  %>% write.csv(file= "VarsNNUED04.csv")
+
+```
+
+Zu 2:
+
+Auch eine kleine Funktion, die die Kookkurrenzprofile der einzelnen Varianten in einen Plot pro Variable darstellt. Man gibt der Funktion wieder das Corpus und sagt wo Variable und Variante stehen. Man kann dann noch festlegen, ob man es gerne als einen Plot (facet= TRUE) oder viele Plots haben möchte (facet= FALSE)
+
+```{r}
+Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% plotCooCVars(Variable="V", facet= TRUE)
+
+```
+
+```{r}
+Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% plotCooCVars(Variable="V", facet= FALSE)
+```
+
+Noch offen: Wie mit weiteren Faktoren umgehen? Annotiert ist noch Akzentuierung. Man könnte es jeweils als Variante behandeln und zusammenlegen.
+
+Wenn dann die Variablenanalyse abgeschlossen und die Daten entsprechen recodiert sind (auch dafür könnte man noch ein paar convenience Funktionen schreiben), dann die Kookkurrenzanalyse. An der Darstelllung kann man noch feilen. Es ist noch nicht schnell ersichtlich welche Varianten zu einer Variable gehören. Anders als in deiner Diss wäre hier nicht mehr vertikale oder horizontale Lage zueinander entscheidend, sondern ob die Varianten einer Variable in derselben Wolke sind oder ob sie in unterschiedlichen sind.
+
+Man sagt der Funktion wieder wo die Variable und Variante sind und kann eine minimale Häufigkeit angeben (wenn Häufigkeit kleiner, dann wird es nicht abgebildet).
+
+```{r}
+g <- Corpus %>% filter(str_detect(File,"NN-UED04-G-FGAT_neu")) %>% plotCooC(Variable="V", threshold = 20)
+g
+```
+
+Und so kann man den Plot dann interaktiv "erkunden"
+
+```{r}
+ggplotly(g)
+```
+
+offene Baustellen: finetuning UMAP
