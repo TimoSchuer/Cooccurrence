@@ -1,3 +1,9 @@
+#' shinyCooc Easy coocorrunce analysis via shiny
+#'
+#' @return
+#' @export
+#'
+#' @examples
 shinyCooc <- function(){
  shiny::shinyApp(
   ui = dashboardPage(
