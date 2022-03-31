@@ -19,8 +19,18 @@ shinyCooc <- function(){
                 fluidRow(
                   dataTableOutput("exbData"),
                   selectInput("VariableName", "Choose Column where Variable Name is defined",choices = NULL ),
-                  selectInput("Variants", "Choose Columns where Variants and contextual factors are defined",choices = NULL, multiple = TRUE)
+                  selectInput("Variants", "Choose Columns where Variants and contextual factors are defined",choices = NULL, multiple = TRUE),
+                  selectInput( "Values", "Select Variables to plot",choices = NULL, multiple = TRUE)
                 ),
+                fluidRow(
+                  actionButton("count", "Count Variables"),
+                  actionButton("plotPerVar", "Plot Cooccurrence per Variable"),
+                  actionButton("plotCooc", "Plot Cooccurence of all Vars")
+
+                ),
+                fluidRow(
+                  plotOutput("CountVars")
+                )
 
                 )
       )
@@ -35,7 +45,16 @@ shinyCooc <- function(){
       updateSelectInput(session, "Variants", "Choose Columns where Variants and contextual factors are defined", choices = varN)
       dataExb
     })
+    observe({
+      x <- input$VariableName
+      Values <- dataInput() %>% select(input$VariableName) %>% unique()
+      updateSelectInput(session, "Values", "Select Variables to plot", choices = Values)
+    })
     output$exbData <- renderDataTable({dataInput()})
+    plotCounts <- eventReactive(input$count,{
+      dataInput() %>% countVars(Variable = input$VariableName, Variante = input$Variants) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "stack")
+    })
+    output$CountVars <- renderPlot({plotCounts()})
   }
  )
  # shinyApp(ui, server)

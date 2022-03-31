@@ -1,7 +1,8 @@
 countVars <- function(Corpus, Variable= "Variable", Variante= "Variante"){
   if(length(Variante)>1){
-    Corpus %>% tidyr::unite("Variante",Variante, sep="_")
+    Counts <- Corpus %>% filter(!is.na(V)) %>%  tidyr::unite_("Variante",Variante, sep="_") %>% group_by_(Variable, Variante) %>% count() %>% arrange(n) %>% `names<-`(c("Variable","Variante","n"))
+  }else{
+  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n) %>% `names<-`(c("Variable","Variante","n"))
   }
-  Counts <- Corpus %>% filter(!is.na(V)) %>% group_by_(Variable, Variante) %>% count() %>% arrange(n)
   return(Counts)
 }
