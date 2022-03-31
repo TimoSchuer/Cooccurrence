@@ -3,11 +3,11 @@ plotCooCVars <- function(Corpus, Variable= "Variable", Variante= "Variante",face
     Corpus %>% tidyr::unite("Variante",Variante, sep="_")
   }
   if(!"IPId" %in% names(Corpus)){
-    countPerIP <- Corpus %>% filter(!is.na(.data[[Variable]])) %>%
-      group_by(IpNumber,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>%
-      mutate(Variante= str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% ungroup() %>%
-      dplyr::select(-.data[[Variable]]) %>%  pivot_wider(names_from = Variante, values_from = n) %>%
-      mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IpNumber) %>% as.matrix() %>%  Matrix()
+    countPerIP <- Corpus %>% dplyr::filter(!is.na(.data[[Variable]])) %>%
+      dplyr::group_by(IpNumber,.data[[Variable]], .data[[Variante]]) %>% dplyr::count() %>% dplyr::arrange(n) %>%
+      dplyr::mutate(Variante= stringr::str_c(.data[[Variable]],"_",.data[[Variante]] )) %>% dplyr::ungroup() %>%
+      dplyr::select(-.data[[Variable]]) %>%  tidyr::pivot_wider(names_from = Variante, values_from = n) %>%
+      dplyr::mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IpNumber) %>% base::as.matrix() %>%  Matrix::Matrix()
   }else{
     countPerIP <- Corpus %>% filter(!is.na(.data[[Variable]])) %>%
       group_by(IPId,.data[[Variable]], .data[[Variante]]) %>% count() %>% arrange(n) %>%
