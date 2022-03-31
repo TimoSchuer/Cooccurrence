@@ -13,6 +13,8 @@ library(tidytext)
 library(stringr)
 library(devtools)
 devtools::install_github("TimoSchuer/ExmaraldaR", upgrade = "never")
+devtools::install_github("TimoSchuer/Cooccurrence", upgrade = "never")
+library(Cooccurrence)
 library(ExmaraldaR)
 library(magrittr)
 library(tidyr)
@@ -23,6 +25,12 @@ library(Matrix)
 library(umap)
 library(plotly)
 ```
+
+```{r}
+shinyCooc()
+```
+
+
 
 import test data
 

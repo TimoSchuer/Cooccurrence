@@ -45,14 +45,27 @@ shinyCooc <- function(){
       updateSelectInput(session, "Variants", "Choose Columns where Variants and contextual factors are defined", choices = varN)
       dataExb
     })
-    observe({
-      x <- input$VariableName
-      Values <- dataInput() %>% select(input$VariableName) %>% unique()
-      updateSelectInput(session, "Values", "Select Variables to plot", choices = Values)
-    })
+
     output$exbData <- renderDataTable({dataInput()})
+    Values <- reactive({
+      VarNames <- input$VariableName
+      if(!is.null(input$VariableName)){
+        req(VarNames)
+        Values <- dataInput() %>% select_(input$VariableName) %>% unique()
+      }else{
+        return()
+      }
+    })
+    observe({
+      updateSelectInput(session, "Values", "Select Variables to plot", choices = Values(), selected = Values())
+    })
     plotCounts <- eventReactive(input$count,{
+      VarsPlot <- input$Values
+      if(is.null(VarsPlot)){
+        req(VarsPlot)
+      }
       dataInput() %>% countVars(Variable = input$VariableName, Variante = input$Variants) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "stack")
+
     })
     output$CountVars <- renderPlot({plotCounts()})
   }
