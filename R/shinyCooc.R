@@ -35,7 +35,8 @@ shinyCooc <- function(){
 
                 ),
                 fluidRow(
-                  plotOutput("CountVars")
+                  plotOutput("CountVars"),
+                  plotOutput("CooCVars")
                 )
 
                 )
@@ -71,10 +72,14 @@ shinyCooc <- function(){
       if(is.null(VarsPlot)){
         req(VarsPlot)
       }
-      dataInput() %>% countVars(Variable = input$VariableName, Variante = input$Variants) %>% ungroup() %>% filter(Variable %in% VarsPlot) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "stack")
+      dataInput() %>% countVars(Variable = input$VariableName, Variante = input$Variants) %>% ungroup() %>% filter(Variable %in% VarsPlot) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "dodge")
 
     })
     output$CountVars <- renderPlot({plotCounts()})
+    plotCoocPerVar <- eventReactive(input$plotPerVar,{
+      dataInput()  %>% Cooccurrence::plotCooCVars(Variable = input$VariableName, Variante= input$Variants, facet= TRUE) #%>% dplyr::rename(Variable= {{input$VariableName}}) %>% filter(Variable %in% input$Values)
+    })
+    output$CooCVars <- renderPlot({plotCoocPerVar})
   }
  )
  # shinyApp(ui, server)
