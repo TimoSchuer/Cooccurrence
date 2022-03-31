@@ -14,6 +14,7 @@ Imports:
     ExmaraldaR (>= 0.0.0.9000),
     ggplot2,
     magrittr,
+    Matrix,
     purrr,
     shiny,
     shinydashboard,
