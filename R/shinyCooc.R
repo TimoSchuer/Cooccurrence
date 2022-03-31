@@ -67,10 +67,11 @@ shinyCooc <- function(){
     })
     plotCounts <- eventReactive(input$count,{
       VarsPlot <- input$Values
+      Variable <- input$VariableName
       if(is.null(VarsPlot)){
         req(VarsPlot)
       }
-      dataInput() %>% countVars(Variable = input$VariableName, Variante = input$Variants) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "stack")
+      dataInput() %>%filter_(Variable==VarsPlot) %>%  countVars(Variable = input$VariableName, Variante = input$Variants) %>% ggplot2::ggplot(aes(x=Variable, y=n, fill= Variante))+ ggplot2::geom_col( position= "stack")
 
     })
     output$CountVars <- renderPlot({plotCounts()})
