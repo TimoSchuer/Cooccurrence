@@ -1,0 +1,166 @@
+---
+title: "iclave"
+author: "Timo Schürmann"
+date: "5 4 2022"
+output: html_document
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+
+library(ggplot2)
+
+library(tidytext)
+
+library(stringr)
+
+library(devtools)
+
+devtools::install_github("TimoSchuer/ExmaraldaR", upgrade = "never")
+
+devtools::install_github("TimoSchuer/Cooccurrence", ref = "master", upgrade = "never")
+
+library(Cooccurrence)
+
+library(ExmaraldaR)
+
+library(magrittr)
+
+library(tidyr)
+
+library(tm)
+
+library(MASS)
+
+library(cluster)
+
+library(Matrix)
+
+library(umap)
+
+library(plotly)
+```
+
+Read Corpus
+
+```{r}
+#path <- rstudioapi::selectFile()
+
+path <- "C:/Users/Admin/sciebo/Kookkurrenz/Korpus/NeuFormartiert/NN-UED04-G-FGAT_neu.exb"
+
+Corpus <- ExmaraldaR::read_exb_file(path, readAnn = TRUE, annotation = "linear")
+```
+
+Subsetting Corpus
+
+```{r}
+CorpusiClave <- Corpus %>% filter((V=="I")|(V=="S" & str_detect(Text, "das[s]?|DAS[S]?|es|ES|was|WAS"))|(V=="CH" & str_detect(Text, "[iI]ch|[Aa][uU]ch|ICH|AUCH")) |(V=="Aː" & str_detect(Text, "[hH][aA][bB][eE]?[nN]?|.?[sS][aA][Gg].*"))) %>% mutate(Text= str_remove_all(Text, "[^A-Za-z0-9ÜüÖöÄäß]")) 
+```
+
+Recoding Vars
+
+```{r}
+##CH to Plosives and Fricativs
+
+CorpusiClave[which(CorpusiClave$V=="CH"& str_detect(CorpusiClave$Variante,"çx|ç")),"Variante"] <- "Fri" 
+
+CorpusiClave[which(CorpusiClave$V=="CH"& str_detect(CorpusiClave$Variante,"g|k|Ø")),"Variante"] <- "Plo"
+
+CorpusiClave <- CorpusiClave %>% filter(!(V=="CH" & Variante=="n"))#Sonderfall fällt raus
+
+##S 
+
+CorpusiClave[which(CorpusiClave$V=="S"& str_detect(CorpusiClave$Variante,"z̥|s")),"Variante"] <- "Fri"
+
+CorpusiClave[which(CorpusiClave$V=="S"& str_detect(CorpusiClave$Variante,"d|tʰ|Ø")),"Variante"] <- "Plo"
+
+##Filter Variants of I which are less than 2
+
+CorpusiClave <- CorpusiClave %>% filter(!(V=="I"& str_detect(CorpusiClave$Variante,"eː|ɛ|ʏ")))
+
+##Differ I by Akz
+CorpusiClave <-  CorpusiClave %>% mutate(Variante= case_when(V=="I" ~ str_glue("{Variante}_{Akz}"), TRUE ~Variante))
+```
+
+Plot again after recoding
+
+```{r}
+count <- CorpusiClave %>%  Cooccurrence::countVars(Variable="V")
+
+for (Var in unique(count$Variable)){
+
+  h <- count %>% filter(Variable==Var) %>% ggplot(aes(x=Variable, y=n, fill=Variante, label= Variante)) + geom_col(position="dodge")+ labs(title= Var)
+
+plot(h)                                                                             
+}
+i <- CorpusiClave %>% filter(V=="I") %>% group_by(V,Variante,Akz) %>% count() %>% ungroup() %>% ggplot(aes(x=Akz, y= n, fill= Variante))+ geom_col()
+plot(i)
+```
+
+```{r}
+countLex <- CorpusiClave %>% group_by(Text, V, Variante) %>% count() 
+
+for(var in unique(countLex$V)){
+
+  g <- countLex %>% ungroup() %>%  filter(V==var) %>% slice_max(order_by= n, n=10) %>% ggplot(aes(x=Text,y=n, fill= Variante)) + geom_col() + labs(title= var)
+
+  plot(g)
+
+}
+```
+
+\`\`\`
+
+metric mds
+
+```{r}
+CountPerIP <- CorpusiClave %>%  group_by(IpNumber,V, Variante) %>% count() %>% mutate(Variante2= str_c(V,"_",Variante )) %>% ungroup() %>% dplyr::select(-V) %>%  pivot_wider(names_from = Variante2, values_from = n) %>% mutate(across(everything(), .fns = ~replace_na(.,0))) %>% dplyr::select(-IpNumber) %>% as.matrix() %>%  Matrix()
+
+CoocMat <- t(CountPerIP) %*% CountPerIP %>% Matrix()
+
+CoocMat
+
+adjMat <- daisy(as.matrix(CoocMat),metric = "manhattan")
+
+adjMat
+
+fit <- cmdscale(adjMat, k=2) %>% as.data.frame()
+
+colnames(fit) <- c("Dim1", "Dim2")
+
+ggplot(fit,aes(x=Dim1, y=Dim2, label= rownames(fit))) + geom_jitter()+ geom_text()
+```
+
+nonmetric mds
+
+```{r}
+nMDS <- isoMDS(adjMat, k=2)
+
+nMDS[["points"]] %>% as.data.frame() %>% ggplot(aes(x=V1, y=V2, label= rownames(.))) +geom_jitter() + geom_text() + labs(subtitle = str_glue("Stress=", nMDS[["stress"]]))
+```
+
+umap
+
+```{r}
+  umap_conf <- umap.defaults
+
+  umap_conf$n_neighbors <- 5
+
+  umap_conf$input <- "dist"
+
+  umap.cooc <- adjMat %>% as.matrix() %>% umap(config= umap_conf, input= "dist")
+
+  
+
+  data <- umap.cooc$layout %>% as.data.frame() %>% mutate(Var= rownames(.)) %>%
+
+    separate(Var, into = c("Variable", "Variante"), sep="_")
+
+  g <- ggplot(data, aes(x=V1, y= V2, label= rownames(data)), shape= factor(Variable))+
+
+    geom_point(aes(colour= Variable)) + geom_text()
+
+  g
+```
