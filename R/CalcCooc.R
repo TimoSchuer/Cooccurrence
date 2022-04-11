@@ -12,7 +12,7 @@
 #' @examples
 calcCooc <- function(exb, relative= TRUE, format= "data.frame", Variable= "V", Variante= "Variante"){
   counts <- CountPerIP(exb, Variable=Variable, Variante=Variante, format= "matrix")
-  CoocAbs <- t(Matrix::Matrix(counts)) %*% Matrix::Matrix(counts)
+  CoocAbs <- t(as.matrix(counts)) %*% as.matrix(counts)
   if(relative==FALSE){
     if(format=="matrix"){
       return(CoocAbs)
