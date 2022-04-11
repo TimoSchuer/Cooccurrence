@@ -1,6 +1,6 @@
 calcCooc <- function(exb, relative= TRUE, format= "data.frame", Variable= "V", Variante= "Variante"){
   counts <- CountPerIP(exb, Variable=Variable, Variante=Variante, format= "matrix")
-  CoocAbs <- t(Matrix(counts)) %*% Matrix(counts)
+  CoocAbs <- t(Matrix::Matrix(counts)) %*% Matrix::Matrix(counts)
   if(relative==FALSE){
     if(format=="matrix"){
       return(CoocAbs)
