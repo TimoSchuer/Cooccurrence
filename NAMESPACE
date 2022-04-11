@@ -3,3 +3,4 @@
 export(countVars)
 export(plotCooC)
 export(shinyCooc)
+importFrom(magrittr,"%>%")
