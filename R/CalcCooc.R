@@ -14,6 +14,7 @@ calcCooc <- function(exb, relative= TRUE, format= "data.frame", Variable= "V", V
       CoocMatRel <-  CoocMatRel %>% mutate(across(starts_with(k),~.x/rowSum ))
       CoocMatRel <- CoocMatRel %>% select(-rowSum)
     }
+    CoocMatRel <- CoocMatRel%>% mutate(across(everything(), .fns = ~replace_na(.,0)))
     if(format=="data.frame"){
       return(CoocMatRel)
     }else{
