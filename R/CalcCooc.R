@@ -1,3 +1,15 @@
+#' Calculate coccurrence matrix
+#'
+#' @param exb
+#' @param relative
+#' @param format
+#' @param Variable
+#' @param Variante
+#'
+#' @return
+#' @export
+#'
+#' @examples
 calcCooc <- function(exb, relative= TRUE, format= "data.frame", Variable= "V", Variante= "Variante"){
   counts <- CountPerIP(exb, Variable=Variable, Variante=Variante, format= "matrix")
   CoocAbs <- t(Matrix::Matrix(counts)) %*% Matrix::Matrix(counts)
